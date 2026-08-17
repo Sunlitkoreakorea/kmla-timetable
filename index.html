@@ -264,6 +264,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .slot-tag.excluded { background: var(--ink-faint); }
 .slot-raw { color: var(--ink-faint); font-size: 11px; }
 
+.manual-add-box {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
 .added-list { list-style: none; padding: 0; margin: 0; }
 .added-list li {
   display: flex;
@@ -520,6 +525,18 @@ input[type="color"] {
   <section id="added-list-section" class="card">
     <h2>4. 추가된 과목</h2>
     <ul id="added-list" class="added-list"></ul>
+    <div class="manual-add-box">
+      <div class="form-row">
+        <label>과목명
+          <input type="text" id="manual-course-name" placeholder="예: 미적분I" />
+        </label>
+        <label>선생님(선택)
+          <input type="text" id="manual-course-teacher" placeholder="예: 남혜빈" />
+        </label>
+        <button id="manual-add-btn" class="secondary">직접 추가</button>
+      </div>
+      <p class="hint">모듈 검색으로 안 잡히는 과목도 여기서 이름만 적어 추가하고, 아래 "세부설정"에서 요일·교시를 직접 고르면 됩니다.</p>
+    </div>
   </section>
 
   <section id="grid-section" class="card">
@@ -958,7 +975,20 @@ function resolveGrades(entry) {
   return null;
 }
 
-function resolveModule(entry, fallbackGrade) {
+/* "요일별 모듈표"는 그 시간대의 대표 모듈 하나만 적어두는데, 실제로는 같은 시간에 특정
+   선생님/반만 다른 모듈 수업을 하는 예외가 있는 것으로 확인됨(예: 2학년 목요일 3교시는
+   모듈표엔 D3AP지만, 김민주 선생님의 국내 1반 학생은 실제로 P 수업). 이런 확인된 예외만
+   따로 기록해서 모듈표보다 우선 적용한다. 키 형식: "선생님|요일|교시"
+*/
+const MODULE_OVERRIDES = {
+  "김민주|THU|3": "P",
+};
+
+function resolveModule(entry, fallbackGrade, teacher) {
+  if (teacher) {
+    const override = MODULE_OVERRIDES[`${teacher}|${entry.day}|${entry.period}`];
+    if (override) return override;
+  }
   if (entry.module) return entry.module;
   let grades = resolveGrades(entry);
   if ((!grades || grades.length !== 1) && fallbackGrade) grades = [fallbackGrade];
@@ -1121,7 +1151,7 @@ function searchByModule() {
       const inferredGrade = courseInferredGrade(course);
       const matched = [];
       course.entries.forEach((entry, idx) => {
-        const module = resolveModule(entry, inferredGrade);
+        const module = resolveModule(entry, inferredGrade, course.teacher);
         if (moduleMatches(module, moduleQuery)) {
           matched.push({ entry, idx, status: matchStatus(entry, profile), module });
         }
@@ -1323,8 +1353,15 @@ function renderAddedList() {
     right.appendChild(detailBtn);
     right.appendChild(btn);
     li.appendChild(right);
-    li.appendChild(buildDetailPanel(c));
+    const detailPanel = buildDetailPanel(c);
+    li.appendChild(detailPanel);
     ul.appendChild(li);
+
+    if (c.uid === pendingDetailOpenUid) {
+      detailPanel.classList.add("open");
+      pendingDetailOpenUid = null;
+      requestAnimationFrame(() => li.scrollIntoView({ behavior: "smooth", block: "center" }));
+    }
   });
 }
 
@@ -1629,7 +1666,7 @@ function importFromRegistrationText(text) {
     candidates.forEach((course) => {
       const inferredGrade = courseInferredGrade(course);
       let matched = course.entries.filter((e) =>
-        moduleCandidates.some((cand) => moduleMatches(resolveModule(e, inferredGrade), cand))
+        moduleCandidates.some((cand) => moduleMatches(resolveModule(e, inferredGrade, course.teacher), cand))
       );
       // 4단위 미만 과목은, 모듈표상 그 시간이 "모듈AP" 보충 시간으로 지정된 칸은 공강이므로 제외
       if (!(credit >= 4)) {
@@ -2108,6 +2145,34 @@ function initExport() {
   initWallpaperEditor();
 }
 
+/* 모듈 검색으로 안 잡히는 과목(데이터 자체에 없는 선생님 등)도 이름만 적어 바로 추가하고,
+   세부설정에서 요일·교시를 직접 고를 수 있게 하는 수동 추가 */
+let pendingDetailOpenUid = null;
+
+function initManualAdd() {
+  el("#manual-add-btn").addEventListener("click", () => {
+    const nameInput = el("#manual-course-name");
+    const teacherInput = el("#manual-course-teacher");
+    const label = nameInput.value.trim();
+    if (!label) {
+      alert("과목명을 입력하세요.");
+      return;
+    }
+    const record = addCourseRecord({
+      label,
+      teacher: teacherInput.value.trim() || "-",
+      subject: "",
+      dept: "",
+      cells: [],
+    });
+    nameInput.value = "";
+    teacherInput.value = "";
+    pendingDetailOpenUid = record.uid;
+    renderAddedList();
+    renderGrid();
+  });
+}
+
 /* 브라우저에 내 정보/추가한 과목을 저장해서, 다시 열었을 때 이어서 쓸 수 있게 한다.
    (업로드한 엑셀/강의계획서 데이터 자체는 용량이 커서 저장하지 않음 — 다시 열면 재업로드 필요) */
 const STORAGE_KEY = "timetable_app_state_v1";
@@ -2156,6 +2221,7 @@ function main() {
   initUpload();
   initExport();
   initGridInteraction();
+  initManualAdd();
   loadStateFromStorage();
   initPersistence();
   renderAddedList();
