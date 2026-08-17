@@ -1570,10 +1570,18 @@ function parseRegistrationText(text) {
     .filter(Boolean);
 }
 
+function describeProfile(profile) {
+  if (profile.grade === 1) {
+    return `1학년 · 행정반 ${profile.admin}반 · 수업반 ${profile.letter}반`;
+  }
+  const trackLabel = profile.track === "domestic" ? "국내" : "국제";
+  return `${profile.grade}학년 · 계열 ${trackLabel} · 수업반 ${profile.trackClass}반`;
+}
+
 function importFromRegistrationText(text) {
   const profile = getProfile();
   const rows = parseRegistrationText(text);
-  const report = [];
+  const report = [{ text: `[적용된 내 정보: ${describeProfile(profile)}]`, level: "ok" }];
 
   rows.forEach((row) => {
     if (row.skipped) {
