@@ -1941,8 +1941,9 @@ function wrapText(ctx, text, cx, cy, maxWidth, lineHeight) {
 }
 
 function drawWallpaperGrid(ctx, left, top, gridW, gridH, fg, fontPx) {
-  const headerH = gridH * 0.045;
-  const rowH = (gridH - headerH) / PERIODS.length;
+  const HEADER_ROW_RATIO = 0.55; // 요일 헤더 높이 = 한 교시 행 높이의 55%
+  const rowH = gridH / (PERIODS.length + HEADER_ROW_RATIO);
+  const headerH = rowH * HEADER_ROW_RATIO;
   const colLabelW = gridW * 0.015;
   const colW = (gridW - colLabelW) / DAYS.length;
   const soft = fg === "#ffffff" ? "rgba(255,255,255,0.75)" : "rgba(0,0,0,0.65)";
@@ -1998,9 +1999,15 @@ function renderWallpaperFrame(ctx, w, h, opts) {
 
   // 폰트 크기는 표 가로/세로 늘리기와 무관하게, 기준(scale=1) 크기 x 글자크기 슬라이더로만 결정
   const refGridW = w * 0.9;
-  const refGridH = h * 0.62;
-  const refColLabelW = refGridW * 0.07;
+  const refColLabelW = refGridW * 0.015;
   const refColW = (refGridW - refColLabelW) / DAYS.length;
+  // 세로로 긴 폰 화면 비율을 그대로 따라가면 칸이 정사각형(또는 세로로 긴 모양)이 되어버려서,
+  // 화면 비율과 무관하게 칸 자체는 가로가 넓은 모양(요일표 특유의 형태)이 되도록 셀 가로세로
+  // 비율을 고정해서 표 높이를 거꾸로 계산한다.
+  const CELL_ASPECT = 1.65; // 칸의 가로:세로 비율
+  const refRowH = refColW / CELL_ASPECT;
+  const refHeaderH = refRowH * 0.55;
+  const refGridH = refHeaderH + refRowH * PERIODS.length;
   const fontPx = {
     day: Math.round(refColW * 0.22 * wallState.fontScale),
     period: Math.round(refColLabelW * 0.32 * wallState.fontScale),
